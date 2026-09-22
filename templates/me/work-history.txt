@@ -1,0 +1,34 @@
+WORK HISTORY: THE SOURCE OF TRUTH
+
+Every CV, cover letter and fit score reads from this file.
+Only facts you can defend in an interview go here.
+Filled in during setup from the interview in SETUP.md (and your CV/resume,
+if you gave one). Anything not confirmed yet: mark TO CONFIRM, and never let
+it reach a CV or a claim of fit.
+
+== <Title> | <Employer> | <Mon YYYY - Mon YYYY, or Present> | <Remote/Onsite, type> ==
+What the company does: <one line>
+Did:
+- <a fact you can defend in an interview, not a responsibility copied from a job ad>
+- <another one>
+Tools used (confirmed): <comma separated>
+
+== <repeat one block per job, newest first> ==
+
+== Personal projects ==
+- <name and link, if any>
+
+== Education ==
+- <degree, school, dates, for each>
+
+== Languages ==
+<comma separated>
+
+== Links ==
+<email, phone, LinkedIn, GitHub or portfolio, other>
+
+== NOT confirmed (never claim until you say yes) ==
+- <tools recruiters often assume for this role, that you have never actually used>
+
+== Banned tools ==
+None yet. Add here and to BANNED in profile.py when one gets onto a CV by mistake.

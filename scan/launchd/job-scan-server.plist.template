@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LABEL__</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON__</string>
+        <string>__REPO__/scan/serve.py</string>
+        <string>--no-open</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__REPO__/scan</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>__HOME__</string>
+        <key>PATH</key>
+        <string>__PATH__</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__STATE__/serve.log</string>
+    <key>StandardErrorPath</key>
+    <string>__STATE__/serve.err.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

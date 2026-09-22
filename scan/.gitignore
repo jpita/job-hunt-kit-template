@@ -1,0 +1,23 @@
+# Generated from the seen files by report.py and google_scan.py
+report.html
+report-rejected.html
+google-report.html
+applications/*.html
+
+# Run output
+*.log
+__pycache__/
+
+# Hand-made safety copies
+*.backup-*
+runs.json.tmp
+.feedback-*
+
+# Regenerable cache of posting text, about 15 MB
+bodies.json.gz
+.bodies-*
+notified.json
+discover.log
+board-slice.log
+board-slice.err.log
+report-refresh.log

@@ -1,0 +1,6 @@
+# Personal data: CVs, history, scan state. Never commit.
+/me/
+
+__pycache__/
+*.pyc
+.DS_Store
