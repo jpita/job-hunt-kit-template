@@ -39,6 +39,7 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 |---|---|
 | `python3 scan/scan.py --slice` | Read today's seventh of the boards |
 | `python3 scan/scan.py` | Read every board (slow) |
+| `python3 scan/scan.py --board greenhouse:slug` | Read only one tracked board |
 | `python3 scan/discover.py` | Add new boards to `me/scan/companies.txt` |
 | `python3 scan/report.py` | Rebuild the report |
 | `python3 scan/serve.py` | Serve the report, so your marks save |
@@ -50,6 +51,11 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 
 - Everything is in `me/scan/`: seen jobs, your marks, logs, `report.html`.
 - `me/` is gitignored. Nothing personal goes into git.
+- Scanner state and reports use atomic replacement, so an interrupted write
+  does not leave a truncated JSON or HTML file.
+- Google results replace the saved snapshot only when at least half of the
+  current URLs can be read. A smaller batch records a failure and preserves
+  the last useful snapshot.
 
 ## Tune the search
 

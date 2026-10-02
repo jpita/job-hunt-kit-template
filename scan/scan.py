@@ -34,6 +34,7 @@ ROTATE_DAYS = 7
 import bodies
 import judge as judging
 import runlog
+import storage
 
 from rules import strip, salary
 
@@ -167,6 +168,8 @@ def main():
                     help=f"only the boards due today, about 1/{ROTATE_DAYS} of them")
     ap.add_argument("--day", type=int,
                     help="which rotation day to run, for checking the split")
+    ap.add_argument("--board", action="append",
+                    help="scan only this tracked source:slug; repeat for multiple boards")
     args = ap.parse_args()
 
     started = time.time()
@@ -179,8 +182,8 @@ def main():
         discovered boards takes long enough that one exception used to throw
         away every board already read.
         """
-        SEEN.write_text(json.dumps(seen, indent=1))
-        BOARD_LOG.write_text(json.dumps(asked, indent=1, sort_keys=True))
+        storage.write_json(SEEN, seen, indent=1)
+        storage.write_json(BOARD_LOG, asked, indent=1, sort_keys=True)
         bodies.save(store)
 
     seen = json.loads(SEEN.read_text()) if SEEN.exists() else {}
@@ -192,6 +195,11 @@ def main():
     entries = [l.strip() for l in COMPANIES.read_text().splitlines()
                if l.strip() and not l.strip().startswith("#")]
     full = len(entries)
+    if args.board:
+        missing = set(args.board) - set(entries)
+        if missing:
+            ap.error("untracked board(s): " + ", ".join(sorted(missing)))
+        entries = [e for e in entries if e in args.board]
     if args.slice:
         day = args.day if args.day is not None else datetime.date.today().toordinal()
         never = {e for e in entries if e not in asked}

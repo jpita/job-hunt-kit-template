@@ -13,14 +13,16 @@ step no Python sees, the browser harvest:
   python3 runlog.py google --failed           it broke for another reason
   python3 runlog.py show                      the last run of each kind
 """
-import json, sys, pathlib, datetime
+import datetime, fcntl, json, os, pathlib, sys, tempfile
 
 import config
+import storage
 
 F = config.STATE / "runs.json"
+LOCK = F.with_name(".runs.lock")
 # "rejudge" re-runs the rules over cached text. It refreshes no search,
 # so the health banner ignores it, but it belongs in the history.
-KINDS = ("boards", "google", "report", "rejudge")
+KINDS = ("discovery", "boards", "google", "report", "rejudge")
 # 400 runs is over a year of daily scans of all three kinds.
 KEEP = 400
 
@@ -40,20 +42,25 @@ def load():
 
 
 def record(kind, ok, **counts):
-    """Append one run. Never raises: a logging failure must not kill a scan."""
+    """Append one run without losing simultaneous scanner or report writes."""
     try:
-        runs = load()
-        runs.append(dict(kind=kind, ok=bool(ok), when=now(), **counts))
-        F.write_text(json.dumps(runs[-KEEP:], indent=1))
+        with LOCK.open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            runs = load()
+            runs.append(dict(kind=kind, ok=bool(ok), when=now(), **counts))
+            storage.write_json(F, runs[-KEEP:], indent=1)
     except OSError as e:
         print(f"  ! could not write {F.name}: {e}", file=sys.stderr)
 
 
-def last(kind, ok_only=True):
+def last(kind, ok_only=True, completed_only=False):
     """The most recent run of one kind, or {}."""
     for r in reversed(load()):
-        if r.get("kind") == kind and (r.get("ok") or not ok_only):
-            return r
+        if r.get("kind") != kind or (ok_only and not r.get("ok")):
+            continue
+        if completed_only and kind == "google" and r.get("ok") and "urls_in" not in r:
+            continue
+        return r
     return {}
 
 

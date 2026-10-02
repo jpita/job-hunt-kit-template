@@ -11,7 +11,7 @@ run, and this merges them.
 Nothing is hidden. Every job either scanner saw appears here, tagged with where
 it came from and the day it first showed up.
 """
-import json, pathlib, datetime, html
+import datetime, html, json, pathlib, re
 
 import config
 
@@ -21,6 +21,7 @@ import rank
 import rule_reports
 import rules
 import runlog
+import storage
 
 HERE = config.STATE
 OUT = HERE / "report.html"
@@ -62,8 +63,8 @@ def health(today):
     rank = {"ok": 0, "warn": 1, "bad": 2}
 
     for kind, label in (("boards", "Direct board scan"), ("google", "Google scan")):
-        ok_run = runlog.last(kind, ok_only=True)
-        any_run = runlog.last(kind, ok_only=False)
+        ok_run = runlog.last(kind, ok_only=True, completed_only=True)
+        any_run = runlog.last(kind, ok_only=False, completed_only=True)
         age = runlog.age_days(ok_run.get("when"), today)
 
         if age is None:
@@ -137,9 +138,22 @@ def bucket_of(hard, soft):
     return judge.bucket_for(hard, soft)
 
 
+def job_identity(url):
+    """Treat Greenhouse host variants for one posting as the same job."""
+    m = re.match(
+        r"https://(?:job-)?boards(?:\.eu)?\.greenhouse\.io/([^/]+)/jobs/(\d+)(?:[/?#]|$)",
+        url, re.I)
+    return ("greenhouse", m.group(1).lower(), m.group(2)) if m else ("url", url)
+
+
 def load():
     """Both history files, normalised to one row shape, merged by URL."""
     marks = feedback.load()
+    marks_by_job = {}
+    for url, mark in marks.items():
+        key = job_identity(url)
+        if key not in marks_by_job or feedback.is_handled(mark):
+            marks_by_job[key] = mark
     rows = {}
 
     if BOARD.exists():
@@ -193,15 +207,17 @@ def load():
     reported = {}
     for i in rule_reports.load():
         if i.get("open"):
-            reported[i["url"]] = i.get("note", "")
+            reported[job_identity(i["url"])] = i.get("note", "")
     for url, r in rows.items():
-        r["reported"] = url in reported
-        r["reported_note"] = reported.get(url, "")
+        identity = job_identity(url)
+        r["reported"] = identity in reported
+        r["reported_note"] = reported.get(identity, "")
         # A row you have disputed is not clean. It waits under Reported until
         # the rule behind it is fixed, so it stops competing for attention.
         if r["reported"]:
             r["bucket"] = "reported"
-        m = marks.get(url) or {}
+        alias = marks_by_job.get(identity) or {}
+        m = alias if feedback.is_handled(alias) else (marks.get(url) or alias)
         r["mark"] = m.get("verdict", "")
         r["state"] = m.get("state", "")
         r["note"] = m.get("note", "")
@@ -839,8 +855,8 @@ def main():
     runlog.record("report", ok=True, rows=len(rows),
                   viable=len([r for r in rows
                               if r["bucket"] in ("clean", "check")]))
-    OUT.write_text(render(rows, today, MAIN, aside=True))
-    OUT_NO.write_text(render(rows, today, ASIDE, aside=False))
+    storage.write_text(OUT, render(rows, today, MAIN, aside=True))
+    storage.write_text(OUT_NO, render(rows, today, ASIDE, aside=False))
     for key, name, _ in SECTIONS:
         items = [r for r in rows if r["bucket"] == key]
         new = len([r for r in items if r["first_seen"] == today])

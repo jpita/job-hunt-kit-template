@@ -17,6 +17,7 @@ import config
 
 import report
 import runlog
+import storage
 
 HERE = config.STATE
 STATE = HERE / "notified.json"
@@ -35,15 +36,16 @@ def already():
 
 
 def remember(urls):
-    STATE.write_text(json.dumps(sorted(urls), indent=1))
+    storage.write_json(STATE, sorted(urls), indent=1)
 
 
 def failures():
     """Which sources did not complete, in words."""
     out = []
-    for kind, label in (("boards", "board scan"), ("google", "Google scan")):
-        ok = runlog.last(kind, ok_only=True)
-        any_run = runlog.last(kind, ok_only=False)
+    for kind, label in (("discovery", "board discovery"),
+                        ("boards", "board scan"), ("google", "Google scan")):
+        ok = runlog.last(kind, ok_only=True, completed_only=True)
+        any_run = runlog.last(kind, ok_only=False, completed_only=True)
         if any_run and not any_run.get("ok") and (
                 not ok or any_run["when"] > ok["when"]):
             out.append(f'{label}: {any_run.get("why") or "did not finish"}')
@@ -83,9 +85,11 @@ def main():
 
     rows = report.load()
     seen = already()
-    fresh = [r for r in rows
-             if r["bucket"] in WORTH and r["url"] not in seen
-             and not r.get("state")]
+    groups = report.group_dupes([
+        r for r in rows if r["bucket"] in WORTH and not r.get("state")
+        and r.get("mark") != "bad"])
+    fresh = [r for r in groups if not any(
+        x["url"] in seen for x in [r] + r["dupes"])]
     broke = failures()
 
     lines = []
@@ -112,7 +116,7 @@ def main():
         print("  --dry, nothing sent")
         return
     if notify(title, body):
-        remember(seen | {r["url"] for r in fresh})
+        remember(seen | {x["url"] for r in fresh for x in [r] + r["dupes"]})
 
 
 if __name__ == "__main__":
