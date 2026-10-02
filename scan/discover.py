@@ -13,9 +13,12 @@ Two sources, because no free engine allows unattended site: querying:
                        harvest. It needs the Claude Chrome extension and a live
                        session, so it is run by hand, not by cron.
 """
-import argparse, json, os, re, shutil, subprocess, sys, urllib.request, pathlib, datetime
+import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, time
+import urllib.request
 
 import config
+import runlog
+import storage
 
 # cron runs with a minimal PATH, so find gh up front rather than trusting PATH.
 GH = shutil.which("gh") or "gh"
@@ -25,6 +28,9 @@ COMPANIES = config.COMPANIES
 UA = {"User-Agent": "Mozilla/5.0"}
 PAGES = int(os.environ.get("DISCOVER_PAGES", 10))  # GitHub caps the set at 1000
 PER_PAGE = 100
+# The GitHub code-search endpoint is limited to 10 requests per minute.
+GITHUB_CALL_INTERVAL = 10
+_last_github_call = None
 
 # source -> (host to search for, slug regex, board API to confirm the slug)
 BOARDS = {
@@ -54,22 +60,40 @@ JUNK = {"embed", "api", "jobs", "job", "board", "boards", "search", "www",
 
 def gh_search(host, page):
     """One page of GitHub code search, with the matched text fragments."""
+    global _last_github_call
     cmd = [GH, "api", "-X", "GET", "search/code",
            "-H", "Accept: application/vnd.github.text-match+json",
            "-f", f'q="{host}"',
            "-f", f"per_page={PER_PAGE}", "-f", f"page={page}"]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        if _last_github_call is not None:
+            delay = GITHUB_CALL_INTERVAL - (time.monotonic() - _last_github_call)
+            if delay > 0:
+                time.sleep(delay)
+        _last_github_call = time.monotonic()
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        print(f"  ! gh page {page}: {e}", file=sys.stderr)
+        return None
     if r.returncode:
         print(f"  ! gh page {page}: {r.stderr.strip()[:120]}", file=sys.stderr)
         return None
-    return json.loads(r.stdout)
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        print(f"  ! gh page {page}: invalid JSON", file=sys.stderr)
+        return None
 
 
 def harvest(host, slug_rx):
-    """Every slug GitHub code search can see for one board host."""
+    """(slugs, success) from GitHub code search for one board host."""
     slugs = set()
+    complete = True
     for page in range(1, PAGES + 1):
         d = gh_search(host, page)
+        if d is None:
+            complete = False
+            break
         if not d:
             break
         items = d.get("items", [])
@@ -78,7 +102,7 @@ def harvest(host, slug_rx):
         for it in items:
             for tm in it.get("text_matches", []):
                 slugs |= set(slug_rx.findall(tm.get("fragment", "")))
-    return {s for s in slugs if s.lower() not in JUNK}
+    return {s for s in slugs if s.lower() not in JUNK}, complete
 
 
 
@@ -131,8 +155,10 @@ def main():
         print(f"{n} slugs from {args.slugs}", file=sys.stderr)
 
     added = []
+    search_ok = True
     for src, (host, slug_rx, api) in BOARDS.items():
-        found = set() if args.no_github else harvest(host, slug_rx)
+        found, complete = (set(), True) if args.no_github else harvest(host, slug_rx)
+        search_ok &= complete
         if not args.no_github:
             print(f"searching {host} (GitHub) ...", file=sys.stderr)
         found |= from_search.get(src, set())
@@ -146,7 +172,9 @@ def main():
 
     if not added:
         print("No new live boards.")
-        return
+        runlog.record("discovery", ok=search_ok, added=0,
+                      why="GitHub board search failed" if not search_ok else "")
+        return 0 if search_ok else 1
     # Re-read immediately before writing. The live-check loop takes minutes,
     # and writing back the copy read at the start discards anything added
     # meanwhile: a test run wiped 79 boards this way.
@@ -156,13 +184,19 @@ def main():
     added = [b for b in added if b.lower() not in have]
     if not added:
         print("No new live boards: already added while this was running.")
-        return
+        runlog.record("discovery", ok=search_ok, added=0,
+                      why="GitHub board search failed" if not search_ok else "")
+        return 0 if search_ok else 1
     stamp = datetime.date.today().strftime("%d-%m-%Y")
-    COMPANIES.write_text(
+    storage.write_text(COMPANIES,
         live.rstrip("\n")
         + f"\n# --- added {stamp} by discover.py ---\n"
         + "\n".join(added) + "\n")
     print(f"Added {len(added)} board(s) to companies.txt.")
+    runlog.record("discovery", ok=search_ok, added=len(added),
+                  why="GitHub board search failed" if not search_ok else "")
+    return 0 if search_ok else 1
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())

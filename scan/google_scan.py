@@ -22,6 +22,7 @@ import bodies
 import judge as judging  # one place both scanners judge from
 import rules  # the title and geography rules live there
 import runlog
+import storage
 
 HERE = config.STATE
 OUT = HERE / "google-report.html"
@@ -74,6 +75,7 @@ def fetch_lever(slug, jid, url):
         title=d.get("text", ""), url=url, company=slug,
         loc=" / ".join(cats.get("allLocations") or [cats.get("location", "")]),
         country=d.get("country") or "",
+        remote=d.get("workplaceType") == "remote",
         body=(d.get("descriptionPlain", "") + " " + d.get("additionalPlain", "")),
         pay=(d.get("salaryRange") or {}).get("text", ""),
         posted=posted_date(d.get("createdAt")))
@@ -105,6 +107,7 @@ def fetch_ashby(slug, jid, url):
             return dict(
                 title=j.get("title", ""), url=url, company=slug,
                 loc=" / ".join(x for x in locs if x), country="",
+                remote=j.get("isRemote"),
                 body=rules.strip(j.get("descriptionHtml")),
                 pay=(j.get("compensation") or {}).get("compensationTierSummary") or "",
                 posted=posted_date(j.get("publishedAt")))
@@ -370,13 +373,24 @@ def main():
         if i % 25 == 0:
             print(f"  {i}/{len(urls)}", file=sys.stderr)
 
+    # Do not replace the last useful snapshot after a substantial read failure.
+    read_ok = sum(r["bucket"] != "failed" for r in rows)
+    minimum = max(1, (len(urls) + 1) // 2)
+    if read_ok < minimum:
+        runlog.record("google", ok=False,
+                      why=f"only {read_ok} of {len(urls)} current pages could be read",
+                      urls_in=len(urls), read_ok=read_ok)
+        print(f"  ! Google processing incomplete: {read_ok} of {len(urls)} pages read",
+              file=sys.stderr)
+        return 1
+
     # Anything seen before but absent from today's search stays in the report.
     fresh_urls = {r["url"] for r in rows}
     carried = [r for u, r in history.items() if u not in fresh_urls]
     rows += carried
 
-    OUT.write_text(render(rows, len(urls), today))
-    SEEN.write_text(json.dumps(rows, indent=1))
+    storage.write_text(OUT, render(rows, len(urls), today))
+    storage.write_json(SEEN, rows, indent=1)
     bodies.save(store)
     n_new = len([r for r in rows if r["first_seen"] == today])
     for key, name, _ in SECTIONS:
@@ -385,14 +399,12 @@ def main():
         print(f"  {name}: {len(items)}" + (f" ({new} new)" if new else ""))
     print(f"  {n_new} new today, {len(carried)} carried from earlier runs")
 
-    # Reading zero of the URLs Google returned means the boards refused us,
-    # not that there was nothing to find.
-    read_ok = len([r for r in rows if r["bucket"] != "failed"])
-    runlog.record("google", ok=bool(urls) and read_ok > 0,
+    runlog.record("google", ok=True,
                   urls_in=len(urls), judged=len(rows), read_ok=read_ok,
                   new=n_new, carried=len(carried))
     print(OUT)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

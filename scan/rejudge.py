@@ -20,6 +20,7 @@ import bodies
 import judge
 import report
 import runlog
+import storage
 
 HOME = config.HOME_OR_ANYWHERE
 
@@ -165,9 +166,9 @@ def main():
         return
 
     if seen:
-        BOARD.write_text(json.dumps(seen, indent=1))
+        storage.write_json(BOARD, seen, indent=1)
     if grows is not None:
-        GOOGLE.write_text(json.dumps(grows, indent=1))
+        storage.write_json(GOOGLE, grows, indent=1)
     runlog.record("rejudge", ok=True, board=b_done, google=g_done,
                   moved=len(moves), dropped=len(dropped),
                   skipped=b_skip + g_skip)
