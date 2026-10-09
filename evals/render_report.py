@@ -4,13 +4,36 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 GROUPS = {
-    'shared-ids-high': 'Shared evidence-ID contract, high effort',
-    'verified-low': 'Verified provider requests, low effort',
-    'initial-low': 'Earlier harness, low effort',
-    'initial-high': 'Earlier harness, high effort',
-    'shared-quotes-high': 'Earlier shared quote contract, high effort',
-    'exploratory-batches': 'Exploratory batch calls',
-    'one-case-smoke': 'Single-case CLI compatibility checks',
+    'shared-ids-high': 'Classification with evidence references: high reasoning',
+    'verified-low': 'Classification with verified request settings: low reasoning',
+    'initial-low': 'Custom classification prompt: low reasoning',
+    'initial-high': 'Custom classification prompt: high reasoning',
+    'shared-quotes-high': 'Classification with supporting quotations: high reasoning',
+    'exploratory-batches': 'Batch classification: eight documents in two calls',
+    'one-case-smoke': 'Single-document compatibility checks',
+}
+GROUP_DESCRIPTIONS = {
+    'shared-ids-high': 'Each agent received the same classification instructions and prepared '
+                      'document text. Supporting passages had identifiers that the answer '
+                      'could cite, avoiding the need to reproduce quotations exactly.',
+    'verified-low': 'Each agent received the same prepared prompts and cited passage identifiers. '
+                    'Provider requests were recorded to verify the model, low reasoning setting '
+                    'and absence of available tools.',
+    'initial-low': 'A custom evaluation script supplied the classification policy and prepared '
+                   'documents. This experiment used a different prompt and grader from the '
+                   'evidence-reference and quotation experiments.',
+    'initial-high': 'The custom-prompt experiment repeated at high reasoning. Compare it with '
+                    'the low-reasoning custom-prompt table; other experiments used different '
+                    'instructions and grading.',
+    'shared-quotes-high': 'Each agent followed shared classification instructions and was '
+                         'required to reproduce supporting quotations from the source text. '
+                         'Answers failed validation when those quotations did not match.',
+    'exploratory-batches': 'Each agent classified eight documents across two command-line '
+                          'calls. Category labels and supporting quotations were checked '
+                          'separately; a complete answer-validity score was not recorded.',
+    'one-case-smoke': 'Each command-line tool classified one document with a known expected '
+                     'category. This checks whether the integration works, rather than '
+                     'measuring accuracy across a varied dataset.',
 }
 README_START = '<!-- BEGIN GENERATED EVAL RESULTS -->'
 README_END = '<!-- END GENERATED EVAL RESULTS -->'
@@ -18,17 +41,30 @@ README_END = '<!-- END GENERATED EVAL RESULTS -->'
 
 def render_overview(data):
     lines = [README_START, '', '## Agent evaluations', '',
-             'Measured 8-9 October 2026: 16 runs across eight model IDs. '
-             'The original text-classification fixtures and personal policy remain private. '
-             'The public synthetic support-ticket example is a separate suite.', '',
-             'Compare rows within the same experiment only. Prompts and scoring changed '
-             'between experiments; native CLI context, caching and orchestration also differed.', '',
-             '| Experiment | Agent / model | Effort | Category matches | Valid outputs | Time (s) | Input tokens | Output tokens | Cost (USD) |',
+             'These experiments tested whether command-line AI agents could assign documents '
+             'to predefined categories, follow a classification policy and cite supporting text. '
+             'The table contains 16 recorded results across eight model IDs, measured '
+             '8-9 October 2026.', '',
+             'Each row summarizes one agent configuration. Most configurations classified ten '
+             'documents; batch tests classified eight, and compatibility checks classified one. '
+             'The source documents and personal policy are private. The reusable '
+             '[eval template](evals/README.md) includes a separate synthetic support-ticket '
+             'dataset; the scores below were not measured on that example.', '',
+             '**Reading the table:** Reasoning is the requested level of model deliberation. '
+             'Category matches compares answers with predefined expected labels. Valid answers '
+             'passed the experiment\'s response-format and evidence checks. A score of 10/10 '
+             'means ten out of ten documents. Time, tokens and cost are totals for the row.', '',
+             'Compare configurations using the same experiment and reasoning setting. '
+             'The experiments used different prompts and grading rules; the tools also supplied '
+             'different system instructions, cache behavior and internal model calls. '
+             'This measures complete agent workflows, rather than model performance in isolation.', '',
+             '| Experiment | Agent / model | Reasoning | Category matches | Valid answers | Total time (s) | Input tokens | Output tokens | Estimated cost (USD) |',
              '|---|---|---|---:|---:|---:|---:|---:|---|']
-    names = {'shared-ids-high': 'Shared IDs v2', 'verified-low': 'Verified API',
-             'initial-low': 'Initial', 'initial-high': 'Initial',
-             'shared-quotes-high': 'Shared quotes v1',
-             'exploratory-batches': 'Batch (2 calls)', 'one-case-smoke': 'Smoke (1 case)'}
+    names = {'shared-ids-high': 'Evidence references', 'verified-low': 'Verified request settings',
+             'initial-low': 'Custom prompt', 'initial-high': 'Custom prompt',
+             'shared-quotes-high': 'Supporting quotations',
+             'exploratory-batches': 'Batch classification',
+             'one-case-smoke': 'Single-document check'}
     for cohort in GROUPS:
         for r in data['rows']:
             if r['cohort'] != cohort:
@@ -45,14 +81,18 @@ def render_overview(data):
                          f"{r['reasoning_effort']} | {ratio(r['category_correct'])} | "
                          f"{ratio(r['valid_outputs'])} | {r['seconds']:.3f} | "
                          f"{r['input_tokens']:,} | {r['output_tokens']:,} | {cost} |")
-    lines += ['', 'Time and cost are totals per row. Tokens include native agent overhead. '
-              'Estimates are not settled charges; subscription costs without a dollar '
-              'measurement are unknown, not $0.', '',
-              'Valid outputs means schema/evidence-valid extracted answers, not necessarily '
-              'raw JSON or successful CLI execution. DeepSeek Pro returned exit zero on 4/10 '
-              'cases; Flash returned exit 1 and extra prose in its single-case check. '
-              'The batch Haiku run also had evidence failures despite matching all category labels. '
-              'The full report preserves these distinctions.', '',
+    lines += ['', 'Tokens are the provider-reported units of input and generated text, including '
+              'the agent tool\'s own instructions and internal calls. A CLI estimate is reported '
+              'by the command-line tool; a rate estimate applies published token prices to '
+              'recorded usage. Neither is a settled bill. Unknown subscription costs do not mean '
+              'the service is free. Copilot reported a premium-request unit rather than dollars.', '',
+              '**Correct answers still need a reliable integration.** DeepSeek Pro produced '
+              'ten valid, correctly categorized answers, but its command-line tool reported '
+              'successful completion for only four. Flash produced a correct answer but reported '
+              'failure and included extra prose. The batch Haiku test matched category labels '
+              'but included unsupported evidence. The quotation experiment counted a category '
+              'match only after evidence validation. The detailed report explains these '
+              'grading differences and the remaining limitations.', '',
               '[Full results, cache/reasoning tokens and methodology](evals/BENCHMARKS.md) · '
               '[Reusable eval template](evals/README.md)', '', README_END]
     return '\n'.join(lines)
@@ -61,16 +101,35 @@ def render_overview(data):
 def render(data):
     lines = [
         '# Historical agent evaluation results', '',
-        'Measured 8-9 October 2026. Sixteen aggregate rows cover eight distinct model IDs.', '',
+        'Measured 8-9 October 2026. Sixteen aggregate results cover eight distinct model IDs.', '',
+        'The task was document classification: read supplied text, apply a fixed policy, '
+        'select a category and identify supporting passages. Predictions were checked '
+        'against predefined expected categories. Tests also checked whether the answer '
+        'followed the required structure and cited available source text.', '',
         'These results came from a private text-classification suite. Source texts, URLs, '
         'expected categories and personal policy are withheld. The public support-ticket '
         'example is a separate, new suite: these numbers are not its results and cannot '
         'be reproduced from it.', '',
-        'Each table is a separate cohort. Do not rank across tables: prompts, output '
-        'contracts and scoring changed. Even within a cohort, native CLI system context, '
-        'tokenizers, cache state and internal orchestration differed. These are workflow '
-        'measurements, not intrinsic model efficiency benchmarks. Ten selected cases '
-        'in one pass do not establish a production error rate.', '',
+        'Each table describes a separate experiment. Instructions, required response '
+        'structure and grading rules differed between experiments. Even within a table, '
+        'the command-line tools supplied different system instructions, tokenization, '
+        'cache behavior and internal model calls. The measurements describe these '
+        'complete workflows. A single pass over ten selected documents is too small '
+        'to estimate a production error rate or establish a general model ranking.', '',
+        '## How to read the results', '',
+        '- **Agent / model:** the command-line application and model identifier it used.',
+        '- **Reasoning:** the requested level of model deliberation. It was verified in '
+        'provider requests only in the verified-settings experiment. Default means no '
+        'explicit level was set.',
+        '- **Category matches:** answers matching predefined expected labels. The quotation '
+        'experiment required evidence validation before counting a label match; the batch '
+        'experiment scored labels separately from evidence.',
+        '- **Valid answers:** extracted answers that passed the experiment\'s structure and '
+        'evidence checks. This does not imply the tool reported successful completion.',
+        '- **Cached read:** input tokens reused from a provider cache. Cache writes are '
+        'recorded separately in the aggregate JSON when available.',
+        '- **Reasoning tokens:** provider-reported generated reasoning, already included '
+        'in output tokens when recorded.', '',
         'Time is the sum of per-case wall durations (two batch durations for the '
         'exploratory cohort), not total experiment elapsed time. Tokens include native '
         'agent overhead. Reasoning tokens are a subset of output; do not add them twice. '
@@ -81,8 +140,8 @@ def render(data):
         'unknown rather than $0. Copilot reports a request unit separately.', '',
     ]
     for cohort, title in GROUPS.items():
-        lines += [f'## {title}', '',
-                  '| Agent / model | Effort | Category matches | Valid outputs | Time (s) | Input | Output | Cached read | Reasoning | Cost / basis |',
+        lines += [f'## {title}', '', GROUP_DESCRIPTIONS[cohort], '',
+                  '| Agent / model | Reasoning | Category matches | Valid answers | Time (s) | Input tokens | Output tokens | Cached read | Reasoning tokens | Cost / basis |',
                   '|---|---|---:|---:|---:|---:|---:|---:|---:|---|']
         for r in data['rows']:
             if r['cohort'] != cohort:
@@ -102,16 +161,22 @@ def render(data):
         lines += ['']
         if cohort == 'verified-low':
             lines += [
-                'Same prepared case prompts, 120-second caps, no wrapper retries and no browsing. '
-                'Forwarded paid requests verified the model, low effort and zero tools. '
-                'A transport adapter removed mandatory Reasonix tool declarations; it did '
-                'not repair answers. Kimi made 10 API requests; Reasonix made 26, including '
-                'internal continuations whose tokens and duration are included.', '',
-                'Kimi: auxiliary facts 8/9, raw unfenced JSON 2/10, CLI exit zero 10/10. '
-                'DeepSeek: auxiliary facts 9/9, raw unfenced JSON 6/10, CLI exit zero 4/10. '
-                'Both had 10/10 schema/evidence-valid extracted answers. Six Reasonix '
-                'calls returned completion_uncertain despite correct extracted answers. '
-                'Category accuracy alone therefore overstates readiness for automation.', '',
+                'Each document had a 120-second process limit. The evaluation script did '
+                'not retry failed calls or allow browsing. A forwarding adapter recorded '
+                'provider requests and removed tool definitions that Reasonix added by '
+                'default, so neither workflow could call a tool. The adapter did not change '
+                'answers. Kimi made 10 paid API requests; Reasonix made 26 because it '
+                'continued processing internally. All those calls contribute to the '
+                'reported tokens, time and estimated cost.', '',
+                'Additional factual fields were graded separately from category labels '
+                'on nine applicable cases: Kimi matched eight; DeepSeek matched nine. '
+                'Kimi returned a plain JSON object without Markdown formatting on 2/10 '
+                'cases; DeepSeek did so on 6/10. The evaluator could extract and validate '
+                'all ten answers from each workflow.', '',
+                'Kimi\'s command-line process reported success on 10/10 cases. Reasonix '
+                'reported success on 4/10; the remaining six returned '
+                '`completion_uncertain`, a failure status, despite correct extracted answers. '
+                'A production integration would need to handle that distinction.', '',
                 'Token-rate estimates per case: Kimi $0.0146424; DeepSeek $0.0058333. '
                 'Recorded rates per million tokens: Kimi fresh input/default five-minute '
                 'cache writes $3, cache reads $0.30, output $15; DeepSeek off-peak fresh '
@@ -123,23 +188,28 @@ def render(data):
                 '[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/).', '',
             ]
         elif cohort == 'shared-quotes-high':
-            lines += ['Luna matched all 10 raw category labels, but only five outputs passed '
-                      'the quote/evidence contract. The table counts only validated category '
-                      'matches. Haiku passed the contract on 10 outputs but matched nine categories.', '']
+            lines += ['Luna selected the expected category on all ten documents, but only five '
+                      'answers passed quotation validation. The table counts only those five '
+                      'validated category matches. Haiku passed answer validation on all ten '
+                      'documents and matched nine expected categories.', '']
         elif cohort == 'exploratory-batches':
             lines += ['Eight decisions across two batch calls per agent. Luna evidence quotes '
                       'were valid 14/14; Haiku quotes were valid 8/16 and it made three '
-                      'unsupported positive claims. Whole-output validity was not scored. '
-                      'The legacy Luna dollar estimate used unverified rate assumptions; '
-                      'retain it only as historical provenance, not current pricing.', '']
+                      'unsupported claims that documents satisfied policy constraints. '
+                      'Complete answer validity was not scored. The Luna dollar estimate used '
+                      'unverified rate assumptions; it records the original calculation and '
+                      'should not be used to budget future runs.', '']
         elif cohort == 'one-case-smoke':
-            lines += ['One expected outcome establishes compatibility only. Reasonix Flash '
-                      'returned exit 1 and extra prose, despite a correct extractable decision. '
+            lines += ['Reasonix Flash produced a correct decision that the evaluator could '
+                      'extract, but added extra prose and returned process exit code 1 '
+                      '(failure). Its valid-answer score covers the extracted decision; '
+                      'its complete response did not meet the required format. '
                       'Its recorded model ID is the legacy alias; '
                       '[DeepSeek documents its routing to V4.1 Flash]'
                       '(https://api-docs.deepseek.com/quick_start/pricing/). '
-                      'Copilot used Auto and selected Luna; its model was not pinned. '
-                      'Gemini had no completed run and is excluded.', '']
+                      'Copilot automatically selected Luna instead of using an explicitly '
+                      'chosen model. No Gemini evaluation completed, so there is no Gemini '
+                      'result in this report.', '']
     return '\n'.join(lines).rstrip() + '\n'
 
 

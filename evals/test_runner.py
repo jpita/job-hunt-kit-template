@@ -44,7 +44,7 @@ class HarnessTests(unittest.TestCase):
         root = Path(__file__).resolve().parent
         data = json.loads((root / 'historical-results.json').read_text())
         report = render(data)
-        self.assertEqual(report.count('\n## '), 7)
+        self.assertEqual(report.count('\n## '), 8)
         self.assertIn('private text-classification suite', report)
         self.assertIn('USD unknown', report)
         self.assertIn('legacy-rate-estimate-unverified', report)
