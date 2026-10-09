@@ -4,7 +4,7 @@ import sys
 import unittest
 
 import runner
-from render_report import render
+from render_report import render, render_overview, README_START, README_END
 
 
 class HarnessTests(unittest.TestCase):
@@ -50,6 +50,13 @@ class HarnessTests(unittest.TestCase):
         self.assertIn('legacy-rate-estimate-unverified', report)
         self.assertEqual(len(data['rows']), 16)
         self.assertEqual(len({r['model'] for r in data['rows']}), 8)
+        overview = render_overview(data)
+        self.assertEqual(sum(line.startswith('| ') for line in overview.splitlines()), 17)
+        for row in data['rows']:
+            self.assertIn(f"`{row['model']}`", overview)
+        readme = (root.parent / 'README.md').read_text()
+        generated = README_START + readme.split(README_START, 1)[1].split(README_END, 1)[0] + README_END
+        self.assertEqual(generated, overview)
 
 
 if __name__ == '__main__':

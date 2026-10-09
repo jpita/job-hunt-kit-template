@@ -12,6 +12,50 @@ GROUPS = {
     'exploratory-batches': 'Exploratory batch calls',
     'one-case-smoke': 'Single-case CLI compatibility checks',
 }
+README_START = '<!-- BEGIN GENERATED EVAL RESULTS -->'
+README_END = '<!-- END GENERATED EVAL RESULTS -->'
+
+
+def render_overview(data):
+    lines = [README_START, '', '## Agent evaluations', '',
+             'Measured 8-9 October 2026: 16 runs across eight model IDs. '
+             'The original text-classification fixtures and personal policy remain private. '
+             'The public synthetic support-ticket example is a separate suite.', '',
+             'Compare rows within the same experiment only. Prompts and scoring changed '
+             'between experiments; native CLI context, caching and orchestration also differed.', '',
+             '| Experiment | Agent / model | Effort | Category matches | Valid outputs | Time (s) | Input tokens | Output tokens | Cost (USD) |',
+             '|---|---|---|---:|---:|---:|---:|---:|---|']
+    names = {'shared-ids-high': 'Shared IDs v2', 'verified-low': 'Verified API',
+             'initial-low': 'Initial', 'initial-high': 'Initial',
+             'shared-quotes-high': 'Shared quotes v1',
+             'exploratory-batches': 'Batch (2 calls)', 'one-case-smoke': 'Smoke (1 case)'}
+    for cohort in GROUPS:
+        for r in data['rows']:
+            if r['cohort'] != cohort:
+                continue
+            ratio = lambda value: 'not scored' if value is None else f"{value}/{r['cases']}"
+            cost = 'unknown'
+            if r['cost_usd'] is not None:
+                basis = {'cli-estimate': 'CLI estimate', 'token-rate-estimate': 'rate estimate',
+                         'legacy-rate-estimate-unverified': 'unverified legacy estimate'}[r['cost_basis']]
+                cost = f"${r['cost_usd']:.6f} ({basis})"
+            elif r.get('premium_requests') is not None:
+                cost = f"{r['premium_requests']} premium request; USD unknown"
+            lines.append(f"| {names[cohort]} | {r['provider']} / `{r['model']}` | "
+                         f"{r['reasoning_effort']} | {ratio(r['category_correct'])} | "
+                         f"{ratio(r['valid_outputs'])} | {r['seconds']:.3f} | "
+                         f"{r['input_tokens']:,} | {r['output_tokens']:,} | {cost} |")
+    lines += ['', 'Time and cost are totals per row. Tokens include native agent overhead. '
+              'Estimates are not settled charges; subscription costs without a dollar '
+              'measurement are unknown, not $0.', '',
+              'Valid outputs means schema/evidence-valid extracted answers, not necessarily '
+              'raw JSON or successful CLI execution. DeepSeek Pro returned exit zero on 4/10 '
+              'cases; Flash returned exit 1 and extra prose in its single-case check. '
+              'The batch Haiku run also had evidence failures despite matching all category labels. '
+              'The full report preserves these distinctions.', '',
+              '[Full results, cache/reasoning tokens and methodology](evals/BENCHMARKS.md) · '
+              '[Reusable eval template](evals/README.md)', '', README_END]
+    return '\n'.join(lines)
 
 
 def render(data):
@@ -100,4 +144,12 @@ def render(data):
 
 
 if __name__ == '__main__':
-    (ROOT / 'BENCHMARKS.md').write_text(render(json.loads((ROOT / 'historical-results.json').read_text())))
+    data = json.loads((ROOT / 'historical-results.json').read_text())
+    (ROOT / 'BENCHMARKS.md').write_text(render(data))
+    readme = ROOT.parent / 'README.md'
+    text = readme.read_text()
+    if README_START not in text or README_END not in text:
+        raise ValueError('README generated-result markers are missing')
+    before, rest = text.split(README_START, 1)
+    _, after = rest.split(README_END, 1)
+    readme.write_text(before + render_overview(data) + after)
