@@ -1,0 +1,6 @@
+runs/
+private/
+__pycache__/
+*.log
+*.jsonl
+.env*
